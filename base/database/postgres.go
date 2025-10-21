@@ -1,4 +1,4 @@
-package database 
+package database
 
 import (
 	"database/sql"
@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	_ "github.com/lib/pq" 
+	_ "github.com/lib/pq"
 )
 
 var DB *sql.DB
@@ -16,14 +16,14 @@ func Connect() {
 	connStr := os.Getenv("DATABASE_URL")
 
 	if connStr == "" {
-		// Fallback to individual env vars 
+		// Fallback to individual env vars
 		connStr = fmt.Sprintf(
 			"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 			os.Getenv("DB_HOST"),
 			os.Getenv("DB_PORT"),
 			os.Getenv("DB_USER"),
 			os.Getenv("DB_PASSWORD"),
-			os.Getenv("DB_NAME"), 
+			os.Getenv("DB_NAME"),
 		)
 	}
 
@@ -33,7 +33,7 @@ func Connect() {
 	}
 
 	if err = DB.Ping(); err != nil {
-		log.Fatalf("Failed to ping database: %v", err) 
+		log.Fatalf("Failed to ping database: %v", err)
 	}
 
 	log.Println("Successfully connected to database")
@@ -50,7 +50,7 @@ func Migrate() {
 	markup_percentage DECIMAL(5,2),
 	min_price DECIMAL(10,2),
 	max_price DECIMAL(10,2),
-	demand_multiplier DECIMAL(5,2) DEFAULT 1.0),
+	demand_multiplier DECIMAL(5,2) DEFAULT 1.0,
 	active BOOLEAN DEFAULT true,
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -74,17 +74,17 @@ func Migrate() {
 	`
 	_, err := DB.Exec(pricingRulesTable)
 	if err != nil {
-		log.Fatalf("Failed to create pricing_rules table: %v", err) 
+		log.Fatalf("Failed to create pricing_rules table: %v", err)
 	}
 
 	_, err = DB.Exec(priceCalculationsTable)
 	if err != nil {
-		log.Fatalf("Failed to create price_calculations table: %v", err) 
+		log.Fatalf("Failed to create price_calculations table: %v", err)
 	}
 
 	_, err = DB.Exec(indexes)
 	if err != nil {
-		log.Fatalf("Failed to create indexes: %v", err) 
+		log.Fatalf("Failed to create indexes: %v", err)
 	}
 
 	log.Println("Database migrated successfully")

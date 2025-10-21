@@ -1,4 +1,4 @@
-package main 
+package main
 
 import (
 	"log"
@@ -7,13 +7,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/saintparish4/pantera/base/database"
-	"github.com/saintparish4/pantera/base/routes" 
+	"github.com/saintparish4/pantera/base/routes"
 )
 
 func main() {
-	// Load environment variables
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found")
+	// Load environment variables from parent directory
+	if err := godotenv.Load("../.env"); err != nil {
+		log.Println("No .env file found, trying current directory...")
+		godotenv.Load() // Try current directory as fallback
 	}
 
 	// Initialize database
@@ -38,9 +39,9 @@ func main() {
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
-			"status": "healthy",
+			"status":  "healthy",
 			"service": "base-api",
-			"version": "1.0.0", 
+			"version": "1.0.0",
 		})
 	})
 
@@ -50,7 +51,7 @@ func main() {
 	// Start server
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080" 
+		port = "8080"
 	}
 
 	log.Printf(" BASE API running on port %s", port)
