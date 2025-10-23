@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/saintparish4/pantera/base/models"
+	"github.com/saintparish4/pantera/models"
 )
 
 type PricingEngine struct {
@@ -372,7 +372,7 @@ func (e *PricingEngine) gemstone(rule models.PricingRule, req models.PriceReques
 
 	// 2. Get carat tier multiplier
 	caratMultiplier := e.getCaratTierMultiplier(req.CaratWeight, config.CaratTiers)
-	breakdown.CaratTier = e.getCaratTierName(req.CaratWeight, config.CaratTiers)
+	breakdown.CaratTier = e.getCaratTierName(req.CaratWeight)
 	breakdown.CaratMultiplier = caratMultiplier
 
 	// 3. Get cut quality multiplier
@@ -484,7 +484,7 @@ func (e *PricingEngine) getCaratTierMultiplier(carat float64, tiers map[string]f
 }
 
 // getCaratTierName returns the tier name for display
-func (e *PricingEngine) getCaratTierName(carat float64, tiers map[string]float64) string {
+func (e *PricingEngine) getCaratTierName(carat float64) string {
 	if carat >= 3.0 {
 		return "3.0+"
 	}

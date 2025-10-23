@@ -6,9 +6,9 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/saintparish4/pantera/base/database"
-	"github.com/saintparish4/pantera/base/models"
-	"github.com/saintparish4/pantera/base/services"
+	"github.com/saintparish4/pantera/database"
+	"github.com/saintparish4/pantera/models"
+	"github.com/saintparish4/pantera/services"
 )
 
 func SetupPricingRoutes(router *gin.Engine) {
@@ -196,7 +196,8 @@ func getRules(c *gin.Context) {
 	query := `
 		SELECT id, name, strategy, base_price, markup_percentage,
 		       min_price, max_price, demand_multiplier, region_multipliers,
-		       default_currency, active, created_at
+		       default_currency, time_rules, surge_enabled, base_surge_threshold,
+		       gemstone_config, active, created_at
 		FROM pricing_rules
 	`
 
@@ -221,12 +222,15 @@ func getRules(c *gin.Context) {
 		var rule models.PricingRule
 		var regionMultipliers sql.NullString
 		var defaultCurrency sql.NullString
+		var timeRules sql.NullString
+		var gemstoneConfig sql.NullString
 
 		err := rows.Scan(
 			&rule.ID, &rule.Name, &rule.Strategy, &rule.BasePrice,
 			&rule.MarkupPercentage, &rule.MinPrice, &rule.MaxPrice,
 			&rule.DemandMultiplier, &regionMultipliers, &defaultCurrency,
-			&rule.Active, &rule.CreatedAt,
+			&timeRules, &rule.SurgeEnabled, &rule.BaseSurgeThreshold,
+			&gemstoneConfig, &rule.Active, &rule.CreatedAt,
 		)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
@@ -244,6 +248,16 @@ func getRules(c *gin.Context) {
 		// Handle default_currency
 		if defaultCurrency.Valid {
 			rule.DefaultCurrency = defaultCurrency.String
+		}
+
+		// Handle time_rules JSONB
+		if timeRules.Valid {
+			rule.TimeRules.Scan([]byte(timeRules.String))
+		}
+
+		// Handle gemstone_config JSONB
+		if gemstoneConfig.Valid {
+			rule.GemstoneConfig.Scan([]byte(gemstoneConfig.String))
 		}
 
 		rules = append(rules, rule)
@@ -375,7 +389,8 @@ func updateRule(c *gin.Context) {
 		    region_multipliers = $8, default_currency = $9
 		WHERE id = $10
 		RETURNING id, name, strategy, base_price, markup_percentage, min_price, max_price, 
-		          demand_multiplier, region_multipliers, default_currency, active, created_at
+		          demand_multiplier, region_multipliers, default_currency, time_rules,
+		          surge_enabled, base_surge_threshold, gemstone_config, active, created_at
 	`
 
 	// Convert region_multipliers to JSONB
@@ -384,6 +399,8 @@ func updateRule(c *gin.Context) {
 	var rule models.PricingRule
 	var regionMultipliers sql.NullString
 	var defaultCurrency sql.NullString
+	var timeRules sql.NullString
+	var gemstoneConfig sql.NullString
 
 	err = database.DB.QueryRow(
 		query,
@@ -394,7 +411,8 @@ func updateRule(c *gin.Context) {
 		&rule.ID, &rule.Name, &rule.Strategy, &rule.BasePrice,
 		&rule.MarkupPercentage, &rule.MinPrice, &rule.MaxPrice,
 		&rule.DemandMultiplier, &regionMultipliers, &defaultCurrency,
-		&rule.Active, &rule.CreatedAt,
+		&timeRules, &rule.SurgeEnabled, &rule.BaseSurgeThreshold,
+		&gemstoneConfig, &rule.Active, &rule.CreatedAt,
 	)
 
 	if err != nil {
@@ -413,6 +431,16 @@ func updateRule(c *gin.Context) {
 	// Handle default_currency
 	if defaultCurrency.Valid {
 		rule.DefaultCurrency = defaultCurrency.String
+	}
+
+	// Handle time_rules JSONB
+	if timeRules.Valid {
+		rule.TimeRules.Scan([]byte(timeRules.String))
+	}
+
+	// Handle gemstone_config JSONB
+	if gemstoneConfig.Valid {
+		rule.GemstoneConfig.Scan([]byte(gemstoneConfig.String))
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -581,7 +609,8 @@ func getDBRule(ruleID int) (*models.PricingRule, error) {
 	query := `
 		SELECT id, name, strategy, base_price, markup_percentage, 
 		       min_price, max_price, demand_multiplier, region_multipliers,
-		       default_currency, active, created_at
+		       default_currency, time_rules, surge_enabled, base_surge_threshold,
+		       gemstone_config, active, created_at
 		FROM pricing_rules
 		WHERE id = $1
 	`
@@ -589,12 +618,15 @@ func getDBRule(ruleID int) (*models.PricingRule, error) {
 	var rule models.PricingRule
 	var regionMultipliers sql.NullString
 	var defaultCurrency sql.NullString
+	var timeRules sql.NullString
+	var gemstoneConfig sql.NullString
 
 	err := database.DB.QueryRow(query, ruleID).Scan(
 		&rule.ID, &rule.Name, &rule.Strategy, &rule.BasePrice,
 		&rule.MarkupPercentage, &rule.MinPrice, &rule.MaxPrice,
 		&rule.DemandMultiplier, &regionMultipliers, &defaultCurrency,
-		&rule.Active, &rule.CreatedAt,
+		&timeRules, &rule.SurgeEnabled, &rule.BaseSurgeThreshold,
+		&gemstoneConfig, &rule.Active, &rule.CreatedAt,
 	)
 
 	if err != nil {
@@ -609,6 +641,16 @@ func getDBRule(ruleID int) (*models.PricingRule, error) {
 	// Handle default_currency
 	if defaultCurrency.Valid {
 		rule.DefaultCurrency = defaultCurrency.String
+	}
+
+	// Handle time_rules JSONB
+	if timeRules.Valid {
+		rule.TimeRules.Scan([]byte(timeRules.String))
+	}
+
+	// Handle gemstone_config JSONB
+	if gemstoneConfig.Valid {
+		rule.GemstoneConfig.Scan([]byte(gemstoneConfig.String))
 	}
 
 	return &rule, nil

@@ -6,8 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
-	"github.com/saintparish4/pantera/base/database"
-	"github.com/saintparish4/pantera/base/routes"
+	"github.com/saintparish4/pantera/database"
+	"github.com/saintparish4/pantera/routes"
 )
 
 func main() {

@@ -27,7 +27,16 @@ func (gc GemstoneConfig) Value() (driver.Value, error) {
 // Scan implements sql.Scanner for database retrieval
 func (gc *GemstoneConfig) Scan(value interface{}) error {
 	if value == nil {
-		*gc = GemstoneConfig{}
+		*gc = GemstoneConfig{
+			BasePricePerCarat:        make(map[string]float64),
+			CaratTiers:               make(map[string]float64),
+			CutMultipliers:           make(map[string]float64),
+			ClarityMultipliers:       make(map[string]float64),
+			ColorMultipliers:         make(map[string]float64),
+			CertificationMultipliers: make(map[string]float64),
+			TreatmentMultipliers:     make(map[string]float64),
+			OriginMultipliers:        make(map[string]float64),
+		}
 		return nil
 	}
 
