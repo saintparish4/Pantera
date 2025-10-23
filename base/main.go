@@ -36,12 +36,42 @@ func main() {
 		c.Next()
 	})
 
+	// Root endpoint
+	router.GET("/", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"name":        "Pantera Dynamic Pricing API",
+			"version":     "1.0.0",
+			"status":      "live",
+			"description": "Multi-strategy pricing engine",
+			"endpoints": gin.H{
+				"health":       "/health",
+				"rules":        "/api/v1/rules",
+				"calculate":    "POST /api/v1/calculate",
+				"calculations": "/api/v1/calculations",
+			},
+			"strategies": []string{
+				"cost_plus",
+				"geographic",
+				"gemstone",
+			},
+		})
+	})
+
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
+		if err := database.DB.Ping(); err != nil {
+			c.JSON(500, gin.H{
+				"status":   "unhealthy",
+				"database": "disconnected",
+				"error":    err.Error(),
+			})
+			return
+		}
 		c.JSON(200, gin.H{
-			"status":  "healthy",
-			"service": "base-api",
-			"version": "1.0.0",
+			"service":  "base-api",
+			"status":   "healthy",
+			"version":  "1.0.0",
+			"database": "connected",
 		})
 	})
 
