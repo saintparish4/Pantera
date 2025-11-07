@@ -1,91 +1,149 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
+	"io/ioutil"
 	"log"
-	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
 
 	_ "github.com/lib/pq"
+	"github.com/saintparish4/harmonia/config"
 )
 
+// DB is the global database connection
 var DB *sql.DB
 
-func Connect() {
-	var err error
-	connStr := os.Getenv("DATABASE_URL")
+// Connect establishes a connection to PostgreSQL
+func Connect(cfg *config.Config) error {
+	dsn := cfg.GetDatabaseDSN()
 
-	if connStr == "" {
-		// Fallback to individual env vars
-		connStr = fmt.Sprintf(
-			"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-			os.Getenv("DB_HOST"),
-			os.Getenv("DB_PORT"),
-			os.Getenv("DB_USER"),
-			os.Getenv("DB_PASSWORD"),
-			os.Getenv("DB_NAME"),
-		)
-	}
-
-	DB, err = sql.Open("postgres", connStr)
+	db, err := sql.Open("postgres", dsn)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		return fmt.Errorf("failed to open database: %w", err)
 	}
 
-	if err = DB.Ping(); err != nil {
-		log.Fatalf("Failed to ping database: %v", err)
+	// Configure connection pool
+	db.SetMaxOpenConns(cfg.Database.MaxOpenConns)
+	db.SetMaxIdleConns(cfg.Database.MaxIdleConns)
+	db.SetConnMaxLifetime(cfg.Database.ConnMaxLifetime)
+
+	// Verify connection
+	if err := db.Ping(); err != nil {
+		return fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	log.Println("Successfully connected to database")
+	DB = db
+	log.Println("✓ Database connection established")
+	return nil
 }
 
-func Migrate() {
-	// Create pricing_rules table
-	pricingRulesTable := `
-	CREATE TABLE IF NOT EXISTS pricing_rules (
-	id SERIAL PRIMARY KEY,
-	name VARCHAR(255) NOT NULL,
-	strategy VARCHAR(50) NOT NULL,
-	base_price DECIMAL(10,2),
-	markup_percentage DECIMAL(5,2),
-	min_price DECIMAL(10,2),
-	max_price DECIMAL(10,2),
-	demand_multiplier DECIMAL(5,2) DEFAULT 1.0,
-	active BOOLEAN DEFAULT true,
-	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-	);`
+// Close closes the database connection
+func Close() error {
+	if DB != nil {
+		return DB.Close()
+	}
+	return nil
+}
 
-	// Create price_calculations table (audit log)
-	priceCalculationsTable := `
-	CREATE TABLE IF NOT EXISTS price_calculations (
-	id SERIAL PRIMARY KEY,
-	rule_id INTEGER REFERENCES pricing_rules(id),
-	input_data JSONB,
-	calculated_price DECIMAL(10,2),
-	strategy_used VARCHAR(50),
-	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-	);`
+// Migrate runs all pending migrations
+func Migrate(migrationsPath string) error {
+	log.Println("Running database migrations...")
 
-	// Create index for faster queries
-	indexes := `
-	CREATE INDEX IF NOT EXISTS idx_pricing_rules_active ON pricing_rules(active);
-	CREATE INDEX IF NOT EXISTS idx_price_calculations_rule_id ON price_calculations(rule_id);
+	// Create migrations table if it doesn't exist
+	if err := createMigrationsTable(); err != nil {
+		return fmt.Errorf("failed to create migrations table: %w", err)
+	}
+
+	// Get list of migration files
+	files, err := filepath.Glob(filepath.Join(migrationsPath, "*.up.sql"))
+	if err != nil {
+		return fmt.Errorf("failed to read migration files: %w", err)
+	}
+
+	if len(files) == 0 {
+		log.Println("No migration files found")
+		return nil
+	}
+
+	// Sort files by name (which includes version number)
+	sort.Strings(files)
+
+	// Run each migration
+	for _, file := range files {
+		migrationName := filepath.Base(file)
+		migrationName = strings.TrimSuffix(migrationName, ".up.sql")
+
+		// Check if migration already applied
+		var count int
+		err := DB.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = $1", migrationName).Scan(&count)
+		if err != nil {
+			return fmt.Errorf("failed to check migration status: %w", err)
+		}
+
+		if count > 0 {
+			log.Printf("  ⊘ Skipping %s (already applied)", migrationName)
+			continue
+		}
+
+		// Read migration file
+		content, err := ioutil.ReadFile(file)
+		if err != nil {
+			return fmt.Errorf("failed to read migration file %s: %w", file, err)
+		}
+
+		// Execute migration in a transaction
+		tx, err := DB.Begin()
+		if err != nil {
+			return fmt.Errorf("failed to start transaction: %w", err)
+		}
+
+		if _, err := tx.Exec(string(content)); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("failed to execute migration %s: %w", migrationName, err)
+		}
+
+		// Record migration
+		if _, err := tx.Exec("INSERT INTO schema_migrations (version) VALUES ($1)", migrationName); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("failed to record migration %s: %w", migrationName, err)
+		}
+
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("failed to commit migration %s: %w", migrationName, err)
+		}
+
+		log.Printf("  ✓ Applied %s", migrationName)
+	}
+
+	log.Println("✓ All migrations completed")
+	return nil
+}
+
+// createMigrationsTable creates the schema_migrations table
+func createMigrationsTable() error {
+	query := `
+		CREATE TABLE IF NOT EXISTS schema_migrations (
+			version VARCHAR(255) PRIMARY KEY,
+			applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)
 	`
-	_, err := DB.Exec(pricingRulesTable)
-	if err != nil {
-		log.Fatalf("Failed to create pricing_rules table: %v", err)
+	_, err := DB.Exec(query)
+	return err
+}
+
+// HealthCheck verifies the database connection is healthy
+func HealthCheck() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err := DB.PingContext(ctx); err != nil {
+		return fmt.Errorf("database health check failed: %w", err)
 	}
 
-	_, err = DB.Exec(priceCalculationsTable)
-	if err != nil {
-		log.Fatalf("Failed to create price_calculations table: %v", err)
-	}
-
-	_, err = DB.Exec(indexes)
-	if err != nil {
-		log.Fatalf("Failed to create indexes: %v", err)
-	}
-
-	log.Println("Database migrated successfully")
+	return nil
 }

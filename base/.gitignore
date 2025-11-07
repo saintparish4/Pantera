@@ -27,3 +27,6 @@ vendor/
 *.swo
 *~
 
+# Documentation
+FOLDER_STRUCTURE.md
+
