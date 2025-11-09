@@ -225,12 +225,12 @@ func TestMaskAPIKey(t *testing.T) {
 		{
 			name:     "full key",
 			key:      "hm_live_abc123def456abc123def456abc12345",
-			expected: "hm_live_abc1************************",
+			expected: "hm_live_abc1****************************",
 		},
 		{
 			name:     "test key",
 			key:      "hm_test_abc123def456abc123def456abc12345",
-			expected: "hm_test_abc1************************",
+			expected: "hm_test_abc1****************************",
 		},
 		{
 			name:     "short key",
