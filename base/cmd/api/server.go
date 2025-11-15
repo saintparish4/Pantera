@@ -1,4 +1,4 @@
-package api
+package main
 
 import (
 	"context"
@@ -633,12 +633,32 @@ type HandlerPricingEngine struct {
 }
 
 func (e *HandlerPricingEngine) Calculate(ctx context.Context, req *handlers.PricingRequest) (*handlers.PricingResult, error) {
-	domainReq := &domain.PricingRequest{
-		Strategy: req.StrategyType,
-		Inputs:   req.Context, // Map handler Context to domain Inputs
+	// Merge base_price into inputs for the pricing engine
+	inputs := make(map[string]interface{})
+
+	// Copy context fields
+	for k, v := range req.Context {
+		inputs[k] = v
 	}
 
-	response, err := e.engine.Calculate(domainReq, req.Context)
+	// Add base_price and quantity if not already in context
+	// The cost_plus strategy expects "base_cost" in inputs
+	if _, exists := inputs["base_cost"]; !exists && req.BasePrice > 0 {
+		inputs["base_cost"] = req.BasePrice
+	}
+	if _, exists := inputs["base_price"]; !exists && req.BasePrice > 0 {
+		inputs["base_price"] = req.BasePrice
+	}
+	if _, exists := inputs["quantity"]; !exists && req.Quantity > 0 {
+		inputs["quantity"] = req.Quantity
+	}
+
+	domainReq := &domain.PricingRequest{
+		Strategy: req.StrategyType,
+		Inputs:   inputs,
+	}
+
+	response, err := e.engine.Calculate(domainReq, inputs)
 	if err != nil {
 		return nil, err
 	}
@@ -778,4 +798,9 @@ func rootHandler(c *gin.Context) {
 			"docs":      "https://github.com/saintparish4/harmonia",
 		},
 	})
+}
+
+// main is the entry point for the application
+func main() {
+	StartServer()
 }
